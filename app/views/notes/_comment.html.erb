@@ -4,19 +4,19 @@
  
       <div class="hidden-phone" style="padding-top:2px;">
  
-        <% if current_user && current_user.username == "warren" && comment.uid == current_user.uid %>
+        <% if current_user && comment.uid == current_user.uid %>
           <a style="margin-left:4px;" class="btn btn-small pull-right" href="javascript:void(0)" onClick="$('#c<%= comment.cid %>edit').toggle();$('#c<%= comment.cid %>show').toggle()">
             <i class="icon-pencil"></i>
           </a><% end %>
-        <% if current_user && current_user.username == "warren" && (comment.uid == current_user.uid || comment.parent.uid == current_user.uid) %>
-          <a data-remote="true" data-confirm="Are you sure?" href="/comment/delete/<%= comment.cid %>" class="btn btn-small pull-right" id="c<%= comment.cid %>delete-btn">
+        <% if current_user && (current_user.role == "admin" || current_user.role == "moderator" || comment.uid == current_user.uid || comment.parent.uid == current_user.uid) %>
+          <a data-remote="true" data-confirm="Are you sure? <% if current_user && comment.uid != current_user.uid %>Please exercise caution in deleting/moderating others' comments; this cannot be undone.<% end %>" href="/comment/delete/<%= comment.cid %>" class="btn btn-small pull-right" id="c<%= comment.cid %>delete-btn">
               <i class='icon icon-trash'></i>
           </a>
         <% end %>
  
         <div style="margin-top:9px;">
           <i class="icon-comment"></i>
-          <a href="/notes/author/<%= comment.author.name %>"><%= comment.author.name %></a>
+          <% if comment.author %><a href="/profile/<%= comment.author.name %>"><%= comment.author.name %></a><% end %>
           <a style="color:#aaa;" href="#c<%= comment.cid %>">commented</a>
           <%= time_ago_in_words(comment.created_at) %> ago
         </div>
@@ -47,7 +47,7 @@
  
         <div style="margin-top:3px;">
           <i class="icon-comment"></i>
-          <a href="/notes/author/<%= comment.author.name %>"><%= comment.author.name %></a>
+          <% if comment.author %><a href="/profile/<%= comment.author.name %>"><%= comment.author.name %></a><% end %>
           <a style="color:#aaa;" href="#c<%= comment.cid %>">said</a>
           <%= time_ago_in_words(comment.created_at) %> ago
         </div>
@@ -56,13 +56,14 @@
     </div>
   </div>
   <div id="c<%= comment.cid %>show">
-    <p><%= raw auto_link(RDiscount.new(comment.comment).to_html) %></p>
+    <p><%= raw auto_link(RDiscount.new(comment.body).to_html) %></p>
   </div>
   <% if current_user %>
   <form class="well" id="c<%= comment.id %>edit" style="display:none;" action="/comment/update/<%= comment.id %>">
     <h4 style="margin-top:0;">Edit comment</h4>
 
     <textarea onFocus="editing=true" name="body" class="span12" id="c<%= comment.id %>text-input" rows="8" cols="40"><%= comment.comment %></textarea>
+
     <div class="well span11" id="c<%= comment.id %>preview" style="background:white;display:none;"> </div>
     <br style="clear:both;"/>
 

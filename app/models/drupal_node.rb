@@ -1,5 +1,3 @@
-require 'rss'
-
 class UniqueUrlValidator < ActiveModel::Validator
   def validate(record)
     if record.title == "" || record.title.nil?
@@ -8,15 +6,15 @@ class UniqueUrlValidator < ActiveModel::Validator
     elsif record.title == "new" && (record.type == "page" || record.type == "place" || record.type == "tool")
       record.errors[:base] << "You may not use the title 'new'." # otherwise the below title uniqueness check fails, as title presence validation doesn't run until after
     else
-      if !DrupalUrlAlias.find_by_dst(record.generate_path).nil? && record.type == "note"
-      record.errors[:base] << "You have already used this title today."
+      if !DrupalNode.where(path: record.generate_path).first.nil? && record.type == "note"
+        record.errors[:base] << "You have already used this title today."
       end
     end
   end
 end
 
 class DrupalNode < ActiveRecord::Base
-  attr_accessible :title, :uid, :status, :type, :vid, :cached_likes, :comment
+  attr_accessible :title, :uid, :status, :type, :vid, :cached_likes, :comment, :path
   self.table_name = 'node'
   self.primary_key = 'nid'
 
@@ -25,24 +23,24 @@ class DrupalNode < ActiveRecord::Base
 #  has_one :drupal_main_image, :foreign_key => 'vid', :dependent => :destroy
 #  has_many :drupal_content_field_image_gallery, :foreign_key => 'nid'
   has_one :drupal_node_counter, :foreign_key => 'nid', :dependent => :destroy
-  has_one :drupal_node_access, :foreign_key => 'nid', :dependent => :destroy
-  has_many :drupal_node_tag, :foreign_key => 'nid', :dependent => :destroy
-  has_many :drupal_tag, :through => :drupal_node_tag
   has_many :drupal_upload, :foreign_key => 'nid', :dependent => :destroy
   has_many :drupal_files, :through => :drupal_upload
-# these override the above... have to do it manually:
-#  has_many :drupal_node_community_tag, :foreign_key => 'nid'
-#  has_many :drupal_tag, :through => :drupal_node_community_tag
+    has_many :drupal_node_community_tag, :foreign_key => 'nid', :dependent => :destroy
+    has_many :drupal_tag, :through => :drupal_node_community_tag
+    # these override the above... have to do it manually:
+    # has_many :drupal_tag, :through => :drupal_node_tag
   has_many :drupal_comments, :foreign_key => 'nid', :dependent => :destroy
-  has_many :drupal_content_type_map, :foreign_key => 'nid'
+  has_many :drupal_content_type_map, :foreign_key => 'nid', :dependent => :destroy
   has_many :drupal_content_field_bboxes, :foreign_key => 'nid'
-  has_many :drupal_content_field_mappers, :foreign_key => 'nid'
-  has_many :drupal_content_field_map_editor, :foreign_key => 'nid'
+  has_many :drupal_content_field_mappers, :foreign_key => 'nid', :dependent => :destroy
+  has_many :drupal_content_field_map_editor, :foreign_key => 'nid', :dependent => :destroy
+
   has_many :images, :foreign_key => :nid
   has_many :node_selections, :foreign_key => :nid
 
   validates :title, :presence => :true
   validates_with UniqueUrlValidator, :on => :create
+  validates :path, :uniqueness => { :scope => :nid, :message => "This title has already been taken" }
 
   # making drupal and rails database conventions play nice
   class << self
@@ -60,9 +58,13 @@ class DrupalNode < ActiveRecord::Base
 
   before_save :set_changed_and_created
   after_create :setup
-  before_destroy :delete_url_alias
+  before_validation :set_path, on: :create
 
   private
+
+  def set_path
+    self.path = self.generate_path if self.path.blank? && !self.title.blank?
+  end
 
   def set_changed_and_created
     self['changed'] = DateTime.now.to_i
@@ -72,45 +74,28 @@ class DrupalNode < ActiveRecord::Base
   def setup
     self['created'] = DateTime.now.to_i
     self.save
-    current_user = User.find_by_username(DrupalUsers.find_by_uid(self.uid).name)
-    if self.type == "note"
-      slug = DrupalUrlAlias.new({
-        :dst => self.generate_path,
-        :src => "node/"+self.id.to_s
-      }).save
-    else
-      slug = DrupalUrlAlias.new({
-        :dst => self.generate_path,
-        :src => "node/"+self.id.to_s
-      }).save
-    end
     DrupalNodeCounter.new({:nid => self.id}).save
-    self.create_access
-  end
-
-  def delete_url_alias
-    url_alias = DrupalUrlAlias.find_by_src("node/"+self.nid.to_s)
-    url_alias.delete if url_alias
   end
 
   public
 
+  def self.weekly_tallies(type = "note",span = 52)
+    weeks = {}
+    (0..span).each do |week|
+      weeks[span-week] = DrupalNode.count :all, :select => :created, :conditions => {:type => type, :status => 1, :created => Time.now.to_i-week.weeks.to_i..Time.now.to_i-(week-1).weeks.to_i}
+    end
+    weeks
+  end
+
+  # this looks backwards... do we use it?
   def current_revision
     # Grab the most recent revision for this node.
-    DrupalNodeRevision.where(nid: nid).order("timestamp DESC").limit(1)[0]
+    self.drupal_node_revision.order(timestamp: "DESC").last
   end
 
   def current_title
     # Grab the title from the most recent revision for this node.
     current_revision.title
-  end
-
-  def create_access
-    DrupalNodeAccess.new({:nid => self.id, :gid => 0, :realm => 'all', :grant_view => 1, :grant_update => 0, :grant_delete => 0}).save
-  end
-
-  def has_access?
-    DrupalNodeAccess.find(:all, :conditions => {:nid => self.id}).length > 0
   end
 
   def files
@@ -126,14 +111,18 @@ class DrupalNode < ActiveRecord::Base
     self.node_selections.where(:liking => true).collect(&:user)
   end
 
+  def liked_by(uid)
+    self.likers.collect(&:uid).include?(uid)
+  end
+
   def generate_path
-    username = DrupalUsers.find_by_uid(self.uid).name
     if self.type == 'note'
-      "notes/"+username+"/"+Time.now.strftime("%m-%d-%Y")+"/"+self.title.parameterize
+      username = DrupalUsers.find_by_uid(self.uid).name
+      "/notes/"+username+"/"+Time.now.strftime("%m-%d-%Y")+"/"+self.title.parameterize
     elsif self.type == 'page'
-      "wiki/"+self.title.parameterize
+      "/wiki/"+self.title.parameterize
     elsif self.type == 'map'
-      "map/"+self.title.parameterize+"/"+Time.now.strftime("%m-%d-%Y")
+      "/map/"+self.title.parameterize+"/"+Time.now.strftime("%m-%d-%Y")
     end
   end
 
@@ -141,27 +130,32 @@ class DrupalNode < ActiveRecord::Base
   # Manual associations: 
 
   def latest
-    DrupalNodeRevision.find_by_nid(self.nid,:order => "timestamp DESC")
+    self.drupal_node_revision.sort_by { |rev| rev.timestamp }.last
   end
 
   def revisions
-    DrupalNodeRevision.find_all_by_nid(self.nid,:order => "timestamp DESC")
+    r = self.drupal_node_revision.sort_by { |rev| rev.timestamp }
+    r.reverse
   end
 
   def revision_count
-    DrupalNodeRevision.count_by_nid(self.nid)
+    self.drupal_node_revision.size
   end
 
   def comment_count
-    DrupalComment.count :all, :conditions => {:nid => self.nid}
+    self.drupal_comments.size
   end
 
   def comments
-    DrupalComment.find_all_by_nid self.nid, :order => "timestamp", :conditions => {:status => 0}
+    self.drupal_comments.order(timestamp: :desc)
   end
 
   def author
     DrupalUsers.find_by_uid self.uid
+  end
+
+  def coauthors
+    User.find_all_by_username(self.power_tags('with')) if self.has_power_tag('with')
   end
 
   # for wikis:
@@ -188,27 +182,19 @@ class DrupalNode < ActiveRecord::Base
     end
   end
 
-  def render_body
-    RDiscount.new(self.body, :generate_toc).to_html
-  end
-
   # was unable to set up this relationship properly with ActiveRecord associations
   def drupal_main_image
-    DrupalMainImage.find :last, :conditions => ['nid = ? AND field_main_image_fid IS NOT NULL',self.nid]
+    DrupalMainImage.find :last, :order => 'vid', :conditions => ['nid = ? AND field_main_image_fid IS NOT NULL',self.nid]
   end
 
   # provide either a Drupally main_iamge or a Railsy one 
   def main_image(node_type = :all)
-    if self.type == "place" || self.type == "tool" # special handling... oddly needed:
-      DrupalMainImage.find(:last, :conditions => {:nid => self.id}, :order => "field_main_image_fid").drupal_file
+    if self.images.length > 0 && node_type != :drupal
+      self.images.last 
+    elsif self.drupal_main_image && node_type != :rails
+      self.drupal_main_image.drupal_file 
     else
-      if self.images && self.images.length > 0 && node_type != :drupal
-        self.images.last 
-      elsif self.drupal_main_image && node_type != :rails
-        self.drupal_main_image.drupal_file 
-      else
-        nil
-      end
+      nil
     end
   end
 
@@ -227,6 +213,7 @@ class DrupalNode < ActiveRecord::Base
 
   # base this on a tag!
   def is_place?
+    # self.has_tag('chapter')
     self.slug[0..5] == 'place/'
   end
 
@@ -235,6 +222,14 @@ class DrupalNode < ActiveRecord::Base
 
   def has_mailing_list?
     self.has_power_tag("list")
+  end
+
+  def responded_to
+    DrupalNode.find_all_by_nid(self.power_tags("response")) || []
+  end
+
+  def responses
+    DrupalTag.find_nodes_by_type(["response:"+self.id.to_s])
   end
 
   # power tags have "key:value" format, and should be searched with a "key:*" wildcard
@@ -262,14 +257,37 @@ class DrupalNode < ActiveRecord::Base
     tags
   end
 
+  # returns all results as whole tag (node) objects
+  def power_tag_objects(tag)
+    DrupalNodeCommunityTag.find(:all,:conditions => ['nid = ? AND tid IN (?)',self.id,DrupalTag.find(:all, :conditions => ["name LIKE ?",tag+":%"]).collect(&:tid)])
+  end
+
+  # return whole tag objects but no powertags or "event"
+  def normal_tags
+    node_tags = DrupalNodeCommunityTag.find(:all,:conditions => ['nid = ? AND tid IN (?)',self.id,DrupalTag.find(:all, :conditions => ["name NOT LIKE ? AND name NOT LIKE ?","%:%","event"]).collect(&:tid)])
+    tags = []
+    node_tags.each do |nt|
+      tags << nt
+    end
+    tags
+  end
+
   def has_tag(tag)
-    DrupalNodeTag.find(:all,:conditions => ['tid IN (?)',DrupalTag.find_all_by_name(tag).collect(&:tid)]).length > 0
+    DrupalNodeCommunityTag.find(:all,:conditions => ['nid IN (?) AND tid IN (?)',self.id,DrupalTag.find_all_by_name(tag).collect(&:tid)]).length > 0
   end
 
   # has it been tagged with "list:foo" where "foo" is the name of a Google Group?
   def mailing_list
-    Rails.cache.fetch("feed-"+self.id.to_s+"-"+(self.updated_at.to_i/300).to_i.to_s) do
-      RSS::Parser.parse(open('https://groups.google.com/group/'+self.power_tag('list')+'/feed/rss_v2_0_topics.xml').read, false).items
+    begin
+      if true#Rails.env == "production"
+        Rails.cache.fetch("feed-"+self.id.to_s+"-"+(self.updated_at.to_i/300).to_i.to_s) do
+          RSS::Parser.parse(open('https://groups.google.com/group/'+self.power_tag('list')+'/feed/rss_v2_0_topics.xml').read, false).items
+        end
+      else
+        return []
+      end
+    rescue
+      return []
     end
   end
 
@@ -286,7 +304,7 @@ class DrupalNode < ActiveRecord::Base
   end
 
   def tags
-    (self.drupal_tag + DrupalTag.find(:all, :conditions => ["tid IN (?)",DrupalNodeCommunityTag.find_all_by_nid(self.nid).collect(&:tid)])).uniq
+    self.drupal_tag
   end
 
   def tagnames
@@ -309,25 +327,14 @@ class DrupalNode < ActiveRecord::Base
   # ============================================
   # URL-related methods:
 
+  # is this used anymore? deprecate?
   def slug
-    if self.type == "page" || self.type == "tool" || self.type == "place"
-      slug = DrupalUrlAlias.find_by_src('node/'+self.id.to_s).dst.split('/').last if DrupalUrlAlias.find_by_src('node/'+self.id.to_s)
-    else
-      slug = DrupalUrlAlias.find_by_src('node/'+self.id.to_s).dst if DrupalUrlAlias.find_by_src('node/'+self.id.to_s)
-    end
-    slug
-  end
-
-  def path
-    path = "/"+DrupalUrlAlias.find_by_src('node/'+self.id.to_s).dst
-    path.gsub!('/place','/wiki') if self.type == "place"
-    path.gsub!('/tool','/wiki') if self.type == "tool"
-    path
+    self.path.split('/').last
   end
 
   def edit_path
     if self.type == "page" || self.type == "tool" || self.type == "place"
-      path = "/wiki/edit/"+DrupalUrlAlias.find_by_src('node/'+self.id.to_s).dst.split('/').last if DrupalUrlAlias.find_by_src('node/'+self.id.to_s)
+      path = "/wiki/edit/" + self.path.split("/").last
     else
       path = "/notes/edit/"+self.id.to_s
     end
@@ -335,40 +342,21 @@ class DrupalNode < ActiveRecord::Base
   end
 
   def self.find_by_slug(title)
-    urlalias = DrupalUrlAlias.find_by_dst('place/'+title)
-    urlalias = urlalias || DrupalUrlAlias.find_by_dst('tool/'+title)
-    urlalias = urlalias || DrupalUrlAlias.find_by_dst('wiki/'+title)
-    urlalias = urlalias || DrupalUrlAlias.find_by_dst(title)
-    if urlalias
-      urlalias.node
-    else
-      nil
-    end
+    DrupalNode.where(path: ["/#{title}", "/tool/#{title}", "/wiki/#{title}", "/place/#{title}"]).first
   end
 
   def self.find_root_by_slug(title)
-    slug = DrupalUrlAlias.find_by_dst(title)
-    slug.node if slug
+    DrupalNode.where(path: ["/#{title}"]).first
   end
 
   def self.find_map_by_slug(title)
-    urlalias = DrupalUrlAlias.find_by_dst('map/'+title,:order => "pid DESC")
-    urlalias.node if urlalias
+    DrupalNode.where(path: "/map/#{title}").first
   end
 
   def map
-    DrupalContentTypeMap.find_by_nid(self.nid,:order => "vid DESC")
-  end
-
-  def nearby_maps(dist = 1.5)
-    minlat = self.lat - dist
-    maxlat = self.lat + dist
-    minlon = self.lon - dist
-    maxlon = self.lon + dist
-    # GeoRuby 
-    # field_bbox_geo is the geom column
-    #DrupalContentFieldBbox.find_by_geom([[minlon,minlat],[maxlon,maxlat]]).collect(&:drupal_node)
-    []
+    # This fires off a query that orders by vid DESC
+    # and is quicker than doing .order(vid: :DESC) for some reason.
+    self.drupal_content_type_map.last
   end
 
   def locations
@@ -380,15 +368,34 @@ class DrupalNode < ActiveRecord::Base
     self.locations.each do |l|
       locations << l if l && l.x && l.y
     end
-    {:x => locations.collect(&:x).sum/locations.length,:y => locations.collect(&:y).sum/locations.length}
+    # cheap divide by zero hack
+    {:x => locations.collect(&:x).sum/(locations.length+0.000001),:y => locations.collect(&:y).sum/(locations.length+0.000001)}
   end 
 
   def lat
-    self.location[:y]
+    if self.has_power_tag("lat")
+      self.power_tag("lat").to_f 
+    else
+      false
+    end
   end
 
   def lon
-    self.location[:x]
+    if self.has_power_tag("lon")
+      self.power_tag("lon").to_f 
+    else
+      false
+    end
+  end
+
+  # these should eventually displace the above means of finding locations
+  # ...they may already be redundant after tagged_map_coord migration 
+  def tagged_lat
+    self.power_tags('lat')[0]
+  end
+
+  def tagged_lon
+    self.power_tags('lon')[0]
   end
 
   def next_by_author
@@ -463,7 +470,7 @@ class DrupalNode < ActiveRecord::Base
           revision.save!
           node.vid = revision.vid
           # save main image
-          if params[:main_image]
+          if params[:main_image] and params[:main_image] != ''
             img = Image.find params[:main_image]
             img.nid = node.id
             img.save
@@ -502,39 +509,88 @@ class DrupalNode < ActiveRecord::Base
           node.save!
         else
           saved = false
-          node.destroy # clean up. But do this in the model!
+          node.destroy # clean up
         end
       end
     end
     return [saved,node,revision]
   end
 
-  def add_tag(tagname,user)
+  # same as new_note or new_wiki but with arbitrary type -- use for maps, DRY out new_note and new_wiki
+  def self.new_node(params)
     saved = false
-    tag = DrupalTag.new({
-      :vid => 3, # vocabulary id; 1
-      :name => tagname,
-      :description => "",
-      :weight => 0
+    node = DrupalNode.new({
+      :uid => params[:uid],
+      :title => params[:title],
+      :type => params[:type]
     })
-    ActiveRecord::Base.transaction do
-      if tag.valid?
-        tag.save!
-        node_tag = DrupalNodeCommunityTag.new({
-          :tid => tag.id,
-          :uid => user.uid,
-          :date => DateTime.now.to_i,
-          :nid => self.id
+    if node.valid?
+      revision = false
+      saved = true
+      ActiveRecord::Base.transaction do
+        node.save! 
+        revision = node.new_revision({
+          :nid => node.id,
+          :uid => params[:uid],
+          :title => params[:title],
+          :body => params[:body]
         })
-        if node_tag.save
-          saved = true
+        if revision.valid?
+          revision.save!
+          node.vid = revision.vid
+          node.save!
         else
           saved = false
-          tag.destroy
+          node.destroy # clean up
         end
       end
     end
-    return [saved,tag]
+    return [saved,node,revision]
+  end
+
+  def barnstar
+    self.power_tag_objects('barnstar').first
+  end
+
+  def barnstars
+    self.power_tag_objects('barnstar')
+  end
+
+  def add_barnstar(tagname,user)
+    self.add_tag(tagname,user.drupal_user)
+    # don't bother checking if it worked
+    CommentMailer.notify_barnstar(self.author.user,self)
+  end
+
+  def add_tag(tagname,user)
+    tagname = tagname.downcase
+    unless self.has_tag(tagname)
+      saved = false
+      tag = DrupalTag.find_by_name(tagname) || DrupalTag.new({
+        :vid => 3, # vocabulary id; 1
+        :name => tagname,
+        :description => "",
+        :weight => 0
+      })
+      ActiveRecord::Base.transaction do
+        if tag.valid?
+          tag.save!
+          node_tag = DrupalNodeCommunityTag.new({
+            :tid => tag.id,
+            :uid => user.uid,
+            :date => DateTime.now.to_i,
+            :nid => self.id
+          })
+          if node_tag.save
+            saved = true
+          else
+            saved = false
+            tag.destroy
+          end
+        end
+      end
+      return [saved,tag]
+    end
   end
 
 end

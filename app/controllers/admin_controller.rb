@@ -38,9 +38,26 @@ class AdminController < ApplicationController
     redirect_to "/profile/"+@user.username
   end
 
+  def useremail
+    if current_user && (current_user.role == "moderator" || current_user.role == "admin")
+      if params[:address]
+        # address was submitted. find the username(s) and return.
+        @address = params[:address]
+        @users = User.find_all_by_email(params[:address])
+      end
+    else
+      # unauthorized. instead of return ugly 403, just send somewhere else
+      redirect_to '/dashboard'
+    end
+  end
+
   def spam
     if current_user && (current_user.role == "moderator" || current_user.role == "admin")
-      @nodes = DrupalNode.paginate(:order => "nid DESC", :conditions => {:type => 'note', :status => 0}, :page => params[:page])
+      if params[:type] == "wiki"
+        @nodes = DrupalNode.paginate(:order => "nid DESC", :conditions => {:type => "page", :status => 1}, :page => params[:page])
+      else 
+        @nodes = DrupalNode.paginate(:order => "nid DESC", :conditions => {:status => 0}, :page => params[:page])
+      end
     else
       flash[:error] = "Only moderators can moderate posts."
       redirect_to "/dashboard"
@@ -50,10 +67,19 @@ class AdminController < ApplicationController
   def mark_spam
     if current_user && (current_user.role == "moderator" || current_user.role == "admin")
       @node = DrupalNode.find params[:id]
-      @node.status = 0
-      @node.save
-      flash[:notice] = "Item marked as spam. You can undo this on the <a href='/spam'>spam moderation page</a>."
-      redirect_to "/dashboard"
+      if @node.status == 1
+        @node.status = 0
+        @node.save
+        # ban the user too
+        author = @node.author
+        author.status = 0
+        author.save
+        flash[:notice] = "Item marked as spam and author banned. You can undo this on the <a href='/spam'>spam moderation page</a>."
+        redirect_to "/dashboard"
+      else
+        flash[:notice] = "Item already marked as spam and author banned. You can undo this on the <a href='/spam'>spam moderation page</a>."
+        redirect_to "/dashboard"
+      end
     else
       flash[:error] = "Only moderators can publish posts."
       redirect_to @node.path
@@ -132,6 +158,46 @@ class AdminController < ApplicationController
       flash[:error] = "Only moderators can moderate other users."
       redirect_to "/dashboard"
     end
+  end
+
+  def batch
+    if current_user && (current_user.role == "moderator" || current_user.role == "admin")
+      nodes = 0
+      users = []
+      params[:ids].split(',').uniq.each do |nid|
+        node = DrupalNode.find nid
+        node.status = 0
+        node.save
+        nodes += 1
+        user = node.author
+        user.status = 0
+        user.save({})
+        users << user.id
+      end
+      flash[:notice] = nodes.to_s+" nodes spammed and "+users.length.to_s+" users banned."
+      redirect_to "/spam/wiki"
+    else
+      flash[:error] = "Only admins can batch moderate."
+      redirect_to "/dashboard"
+    end
+  end
+
+  def migrate
+    if current_user && current_user.role == "admin"
+      du = DrupalUsers.find params[:id]
+      if du.user
+        flash[:error] = "The user has already been migrated."
+      else 
+        if du.migrate
+          flash[:notice] = "The user was migrated! Enthusiasm!"
+        else
+          flash[:error] = "The user could not be migrated."
+        end
+      end
+    else
+      flash[:error] = "Only admins can migrate users."
+    end
+    redirect_to "/profile/"+du.name
   end
 
 end

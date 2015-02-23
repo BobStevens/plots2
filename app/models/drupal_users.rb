@@ -13,6 +13,10 @@ class DrupalUsers < ActiveRecord::Base
     User.find_by_username self.name
   end
 
+  def username
+    self.name
+  end
+
   def using_new_site?
     !User.find_by_username(self.name).nil?
   end
@@ -42,7 +46,7 @@ class DrupalUsers < ActiveRecord::Base
   end
 
   def liked_notes
-    NodeSelection.find(:all, :conditions => ["status = 1 AND user_id = ? AND liking = true AND node.type = 'note'",self.uid], :include => :drupal_node).collect(&:node).reverse
+    DrupalNode.includes(:node_selections).where("type = 'note' AND node_selections.liking = true AND node_selections.user_id = ? AND node.status = 1", self.uid).order('node_selections.nid DESC')
   end
 
   def liked_pages
@@ -137,6 +141,23 @@ class DrupalUsers < ActiveRecord::Base
       self.lon =  location.lng
       self.lat =  location.lat
       self.save!
+    else
+      return false
+    end
+  end
+
+  def migrate
+    u = User.new({
+      :username => self.name,
+      :id => self.uid,
+      :email => self.mail,
+      :openid_identifier => "http://old.publiclab.org/user/"+self.uid.to_s+"/identity"
+    })
+    u.persistence_token = rand(100000000)
+    if u.save(:validate => false) # <= because validations checks for conflict with existing drupal_user.name
+      key = u.generate_reset_key
+      PasswordResetMailer.reset_notify(u,key)
+      return true
     else
       return false
     end

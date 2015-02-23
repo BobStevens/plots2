@@ -1,29 +1,41 @@
 <div class="span3">
-  <div class="btn-group" style="margin-bottom:6px;">
-    <a rel="tooltip" title="Share your work with others" data-placement="bottom" href="/post" class="btn btn-primary btn-large" data-toggle="modal"><i class="icon-pencil icon-white"></i> Post research</a>
-    <a class="btn btn-primary btn-large dropdown-toggle" data-toggle="dropdown" href="#"><span class="caret"></span></a>
-    <ul class="dropdown-menu">
-      <li><a href="/post"><i class="icon icon-pencil"></i> <b>Post a research note</b></a></li>
-      <li class="divider"></li>
-      <li><a href="/wiki/about-posting"><i class="icon icon-question-mark"></i> About posting</a></li>
-    </ul>
-  </div>
-  <a rel="tooltip" title="Collaborative pages others can edit" data-placement="bottom" href="/wiki/new" class="btn hidden-phone"><i class="icon-book"></i> Create wiki page</a>
-  <hr />
+
+  <% if params[:controller] != "home" && params[:action] != "home" %>
+    <%= render :partial => "sidebar/post_button" %>
+  <% end %>
+
+  <%= render :partial => "sidebar/feature" %>
+
   <div class="sidebar-nav hidden-phone">
 
-    <p><i class="icon icon-envelope"></i> <a href="/wiki/mailing-lists">Mailing lists &raquo;</a></p>
-    <p>Much of our work happens on our mailing lists, which are organized by region and topic. Join one today to get involved.</p>
-    <hr />
-    <p><a href="http://spectralchallenge.org"><img src="/images/spectralchallenge.jpg" width="100%" /></a></p>
+    <% if params[:controller] != "home" && params[:action] != "home" %>
+      <p><i class="icon icon-envelope"></i> <a href="/lists">Discussion lists &raquo;</a></p>
+      <p>Much of our work happens on our discussion lists, which are organized by region and topic. Join one today to get involved.</p>
+      <hr />
+    <% end %>
+
+    <p><a href="/donate"><img src="/images/sidebar-donate.gif" width="100%" /></a></p>
 
     <hr />
 
-    <iframe class="shopify-widget" frameborder="0" scrolling="no" width="100%" height="390" src="http://widgets.shopifyapps.com/products/desktop-spectrometry-kit?shop=publiclab.myshopify.com&style=artgallery&image-size=medium&destination=checkout"></iframe>
-    <iframe class="shopify-widget" frameborder="0" scrolling="no" width="100%" height="390" src="http://widgets.shopifyapps.com/products/balloon-mapping-kit?shop=publiclab.myshopify.com&style=artgallery&image-size=medium&destination=checkout"></iframe>
+    <div id="store-carousel" class="carousel slide" data-ride="carousel">
+      <div class="carousel-inner">
+     
+        <div class="item active"><a href="http://store.publiclab.org/products/desktop-spectrometry-kit"><img src="/images/dsk.jpg"/></a></div>
+        <div class="item"><a href="http://store.publiclab.org/products/balloon-mapping-kit"><img src="/images/balloon-kit.jpg"/></a></div>
+        <div class="item"><a href="http://store.publiclab.org/products/smartphone-spectrometer"><img src="/images/smart-spec.jpg"/></a></div>
 
+      </div>
+    </div>
+    <script>
+      (setTimeout(function() {
+        $('#store-carousel').carousel({
+          interval: 6000
+        })
+      },2000))()
+    </script>
 
     <hr style="margin-bottom:6px;" />
-    <p><small><a href="#"><i class="icon-cog"></i> Options</a></small></p>
+    <p style="display:none;"><small><a href="#"><i class="icon-cog"></i> Options</a></small></p>
   </div>
 </div><!--/span-->

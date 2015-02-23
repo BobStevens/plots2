@@ -11,7 +11,11 @@ class HomeController < ApplicationController
 
   def home
     @title = "a DIY environmental science community"
-    redirect_to "/dashboard" if current_user
+    if current_user
+      redirect_to "/dashboard"
+    else
+      render :template => "home/home"
+    end
   end
 
   # route for seeing the front page even if you are logged in
@@ -23,8 +27,15 @@ class HomeController < ApplicationController
   def dashboard
     @title = "Dashboard"
     @user = DrupalUsers.find_by_name current_user.username
-    set_sidebar :tags, @user.tagnames
+    @note_count = DrupalNode.count :all, :select => :created, :conditions => {:type => 'note', :status => 1, :created => Time.now.to_i-1.weeks.to_i..Time.now.to_i}
+    @wiki_count = DrupalNodeRevision.count :all, :select => :created, :conditions => {:timestamp => Time.now.to_i-1.weeks.to_i..Time.now.to_i}
+    set_sidebar
     @unpaginated = true
+  end
+
+  def comments
+    @comments = DrupalComment.find :all, :limit => 20, :order => "timestamp DESC", :conditions => {:status => 0}
+    render :partial => "home/comments"
   end
 
   # trashy... clean this up!

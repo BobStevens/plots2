@@ -10,12 +10,19 @@ Plots2::Application.routes.draw do
   #   match 'products/:id' => 'catalog#view'
   # Keep in mind you can assign values other than :controller and :action
 
+  #match '', to: 'blogs#show', constraints: {subdomain: /.+/}
+  # or to skip www:
+  match "", to: 'wiki#subdomain', constraints: lambda { |r| r.subdomain.present? && r.subdomain != 'www' && r.subdomain != "i" && r.subdomain != "test" && r.subdomain != "new"}
+  match "*all", to: 'wiki#subdomain', constraints: lambda { |r| r.subdomain.present? && r.subdomain != 'www' && r.subdomain != "i" && r.subdomain != "test" && r.subdomain != "new"}
+
+  match 'ioby' => "legacy#ioby"
+
   match 'login' => "user_sessions#new",      :as => :login
   match 'logout' => "user_sessions#destroy", :as => :logout
   match 'register' => 'users#create'
   match 'reset' => 'users#reset'
   match 'reset/key/:key' => 'users#reset'
-  match 'users/list' => 'users#list'
+  match 'profiles' => 'users#list'
   match 'users/update' => 'users#update'
   match 'signup' => 'users#new'
   match 'home' => 'home#front'
@@ -41,19 +48,32 @@ Plots2::Application.routes.draw do
   # instead of a file named 'wsdl'
   match 'openid/service.wsdl' => 'openid#wsdl'
 
+  match 'following/:type/:name' => 'subscription#following'
+  match 'unsubscribe/:type/:name' => 'subscription#delete'
+  match 'subscribe/:type' => 'subscription#add'
+  match 'subscribe/:type/:name' => 'subscription#add'
+  match 'subscriptions' => 'subscription#index'
+
   match 'wiki/new' => 'wiki#new'
   match 'wiki/popular' => 'wiki#popular'
   match 'wiki/liked' => 'wiki#liked'
   match 'wiki/create' => 'wiki#create'
   match 'wiki/:id' => 'wiki#show'
+    # these need precedence for tag listings
+    match 'feed/tag/:tagname' => 'tag#rss'
+    match ':node_type/tag/:id' => 'tag#show'
   match 'wiki/revisions/:id' => 'wiki#revisions'
+  match 'wiki/revert/:id' => 'wiki#revert'
   match 'wiki/edit/:id' => 'wiki#edit'
+  match 'wiki/update/:id' => 'wiki#update'
   match 'wiki/delete/:id' => 'wiki#delete'
   match 'wiki/revisions/:id/:vid' => 'wiki#revision'
+  match 'wiki/:lang/:id' => 'wiki#show'
+  match 'wiki/edit/:lang/:id' => 'wiki#edit'
   match 'wiki' => 'wiki#index'
-  match 'wiki/tags/:tags' => 'wiki#tags'
 
   match 'place/:id/feed' => 'place#feed'
+  match 'n/:id' => 'notes#shortlink'
   match 'notes/popular' => 'notes#popular'
   match 'notes/liked' => 'notes#liked'
   match 'notes/create' => 'notes#create'
@@ -84,13 +104,6 @@ Plots2::Application.routes.draw do
   match 'likes/node/:id/create' => 'like#create', :as => :add_like
   match 'likes/node/:id/delete' => 'like#delete', :as => :drop_like
 
-  match 'following/:type/:name' => 'subscription#following'
-  match 'unsubscribe/:type/:name' => 'subscription#delete'
-  match 'subscribe/:type' => 'subscription#add'
-  match 'subscribe/:type/:name' => 'subscription#add'
-  match 'subscriptions' => 'subscription#index'
-
-  match 'map' => 'search#map'
   match 'search' => 'search#advanced'
   match 'search/advanced' => 'search#advanced'
   match 'search/advanced/:id' => 'search#advanced'
@@ -98,31 +111,49 @@ Plots2::Application.routes.draw do
   match 'search/typeahead/:id' => 'search#typeahead'
 
   match 'tag/:id' => 'tag#show'
-  match 'maps/:id' => 'map#tag'
+  match 'widget/:id' => 'tag#widget'
   match 'blog' => 'tag#blog', :id => "blog"
   match 'blog/:id' => 'tag#blog'
   match 'contributors/:id' => 'tag#contributors'
+  match 'contributors' => 'tag#contributors_index'
+  match 'tags' => 'tag#index'
   match 'tag/suggested/:id' => 'tag#suggested'
   match 'tag/author/:id.json' => 'tag#author'
   match 'tag/create/:nid' => 'tag#create'
   match 'tag/delete/:nid/:tid' => 'tag#delete'
-  match 'feed/tag/:tagname' => 'tag#rss'
+  match 'barnstar/give/:nid/:star' => 'tag#barnstar'
+  match 'barnstar/give' => 'tag#barnstar'
+  match 'rsvp/:id' => 'notes#rsvp'
+  match 'feed/liked' => 'notes#liked_rss'
 
   match 'dashboard' => 'home#dashboard'
+  match 'dashboard/comments' => 'home#comments'
+  match 'profile/comments/:id' => 'users#comments'
   match 'nearby' => 'home#nearby'
   match 'profile/edit' => 'users#edit'
+  match 'profile/photo' => 'users#photo'
   match 'profile/:id' => 'users#profile'
   match 'profile/:id/edit' => 'users#edit'
   match 'profile/:id/likes' => 'users#likes'
   match 'feed/:author' => 'users#rss'
 
   match 'maps' => 'map#index'
+  match 'map' => 'search#map'
+  match 'maps/:id' => 'map#tag'
+  match 'map/edit/:id' => 'map#edit'
+  match 'map/update/:id' => 'map#update'
+  match 'map/delete/:id' => 'map#delete'
   match 'map/:name/:date' => 'map#show'
   match 'archive' => 'map#index'
   match 'stats' => 'notes#stats'
+  match 'stats/subscriptions' => 'subscription#stats'
   match 'feed' => 'notes#rss'
+  match 'rss.xml' => 'legacy#rss'
 
+  match 'useremail' => 'admin#useremail'
   match 'spam' => 'admin#spam'
+  match 'spam/:type' => 'admin#spam'
+  match 'spam/batch/:ids' => 'admin#batch'
   match 'admin/users' => 'admin#users'
   match 'ban/:id' => 'admin#ban'
   match 'unban/:id' => 'admin#unban'
@@ -131,12 +162,14 @@ Plots2::Application.routes.draw do
   match 'admin/promote/moderator/:id' => 'admin#promote_moderator'
   match 'admin/demote/basic/:id' => 'admin#demote_basic'
   match 'admin/promote/admin/:id' => 'admin#promote_admin'
+  match 'admin/migrate/:id' => 'admin#migrate'
   
   # Sample of named route:
   #   match 'products/:id/purchase' => 'catalog#purchase', :as => :purchase
   # This route can be invoked with purchase_url(:id => product.id)
 
   match 'post' => 'editor#post'
+  match 'images/create' => 'images#create'
   match 'note/add' => 'legacy#note_add'
   match 'page/add' => 'legacy#page_add'
 
@@ -188,5 +221,6 @@ Plots2::Application.routes.draw do
   # Note: This route will make all actions in every controller accessible via GET requests.
 
   match ':controller(/:action(/:id))(.:format)'
+
 
 end

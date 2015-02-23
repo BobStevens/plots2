@@ -1,7 +1,7 @@
 class NotesController < ApplicationController
 
   respond_to :html
-  before_filter :require_user, :only => [:create, :edit, :update]
+  before_filter :require_user, :only => [:create, :edit, :update, :delete, :rsvp]
 
   def index
     @title = "Research notes"
@@ -10,24 +10,36 @@ class NotesController < ApplicationController
 
   def tools
     @title = "Tools"
-    @notes = DrupalNode.paginate(:conditions => {:status => 1, :type => 'tool'}, :order => "node_counter.totalcount DESC", :include => :drupal_node_counter, :page => params[:page])
+    @notes = DrupalTag.find_top_nodes_by_type('tool',['page','tool'],20)
+    #@notes = DrupalNode.paginate(:conditions => {:status => 1, :type => 'tool'}, :order => "node_counter.totalcount DESC", :include => :drupal_node_counter, :page => params[:page])
+    @unpaginated = true
     render :template => "notes/tools_places"
   end
 
   def places
     @title = "Places"
-    @notes = DrupalNode.paginate(:conditions => {:status => 1, :type => 'place'}, :order => "node_counter.totalcount DESC", :include => :drupal_node_counter, :page => params[:page])
+    # currently re-using the notes grid template, so we use the "@notes" instance variable:
+    tids = DrupalTag.find(:all, :conditions => {:name => 'chapter'}).collect(&:tid)
+    nids = DrupalNodeCommunityTag.find(:all, :conditions => ["tid IN (?)",tids]).collect(&:nid)
+    @notes = DrupalNode.find :all, :conditions => ["node.nid in (?) AND (node.type = 'place' OR node.type = 'page')",nids.uniq], :order => "node_counter.totalcount DESC", :include => :drupal_node_counter
+    @unpaginated = true
     render :template => "notes/tools_places"
+  end
+
+  def shortlink
+    @node = DrupalNode.find params[:id]
+    redirect_to @node.path
   end
 
   def show
     if params[:author] && params[:date]
-      @node = DrupalUrlAlias.find_by_dst('notes/'+params[:author]+'/'+params[:date]+'/'+params[:id])
-      @node = DrupalUrlAlias.find_by_dst('report/'+ params[:id]) if @node.nil?
-      @node = @node.node 
+      @node = DrupalNode.where(path: '/notes/'+params[:author]+'/'+params[:date]+'/'+params[:id]).first
+      @node = DrupalNode.where(path: '/report/'+ params[:id]).first if @node.nil?
     else
       @node = DrupalNode.find params[:id]
     end
+
+    return if check_and_redirect_node(@node)
     if @node.author.status == 0 && !(current_user && (current_user.role == "admin" || current_user.role == "moderator"))
       flash[:error] = "The author of that note has been banned."
       redirect_to "/"
@@ -40,7 +52,7 @@ class NotesController < ApplicationController
     end
  
     @node.view
-    @title = @node.title
+    @title = @node.latest.title
     @tags = @node.tags
     @tagnames = @tags.collect(&:name)
 
@@ -48,29 +60,42 @@ class NotesController < ApplicationController
   end
 
   def create
-    saved,@node,@revision = DrupalNode.new_note({
-      :uid => current_user.uid,
-      :title => params[:title],
-      :body => params[:body],
-      :main_image => params[:main_image]
-    })
-    if saved
-      params[:tags].split(',').each do |tagname|
-        @node.add_tag(tagname,current_user)
+    if current_user.drupal_user.status == 1
+      saved,@node,@revision = DrupalNode.new_note({
+        :uid => current_user.uid,
+        :title => params[:title],
+        :body => params[:body],
+        :main_image => params[:main_image]
+      })
+
+      if saved
+        if params[:tags]
+          params[:tags].gsub(' ',',').split(',').each do |tagname|
+            @node.add_tag(tagname.strip,current_user)
+          end
+        end
+        if params[:event] == "on"
+          @node.add_tag("event",current_user)
+          @node.add_tag("event:rsvp",current_user)
+          @node.add_tag("date:"+params[:date],current_user) if params[:date]
+        end
+        # trigger subscription notifications:
+        SubscriptionMailer.notify_node_creation(@node)
+        # opportunity for moderation
+        flash[:notice] = "Research note published. Get the word out on <a href='/lists'>the discussion lists</a>!"
+        redirect_to @node.path
+      else
+        render :template => "editor/post"
       end
-      # trigger subscription notifications:
-      SubscriptionMailer.notify_node_creation(@node)
-      # opportunity for moderation
-      flash[:notice] = "Research note published."
-      redirect_to @node.path
     else
-      render :template => "editor/post"
+      flash.keep[:error] = "You have been banned. Please contact <a href='mailto:web@publiclab.org'>web@publiclab.org</a> if you believe this is in error."
+      redirect_to "/logout"
     end
   end
 
   def edit
     @node = DrupalNode.find(params[:id],:conditions => {:type => "note"})
-    if current_user.uid == @node.uid || current_user.username == "warren" # || current_user.role == "admin" 
+    if current_user.uid == @node.uid || current_user.role == "admin" 
       render :template => "editor/post"
     else
       prompt_login "Only the author can edit a research note."
@@ -80,13 +105,19 @@ class NotesController < ApplicationController
   # at /notes/update/:id
   def update
     @node = DrupalNode.find(params[:id])
-    if current_user.uid == @node.uid || current_user.username == "warren" # || current_user.role == "admin" 
+    if current_user.uid == @node.uid || current_user.role == "admin" 
       @revision = @node.latest
       @revision.title = params[:title]
       @revision.body = params[:body]
+      if params[:tags]
+        params[:tags].gsub(' ',',').split(',').each do |tagname|
+          @node.add_tag(tagname,current_user)
+        end
+      end
       if @revision.valid?
         @revision.save
         @node.vid = @revision.vid
+        # update vid (version id) of main image
         if @node.drupal_main_image
           i = @node.drupal_main_image
           i.vid = @revision.vid 
@@ -100,8 +131,10 @@ class NotesController < ApplicationController
         # save main image
         if params[:main_image] && params[:main_image] != ""
           img = Image.find params[:main_image]
-          img.nid = @node.id
-          img.save
+          unless img.nil?
+            img.nid = @node.id
+            img.save
+          end
         end
         @node.save!
         flash[:notice] = "Edits saved."
@@ -171,13 +204,34 @@ class NotesController < ApplicationController
   end
 
   def rss
-    @notes = DrupalNode.find(:all, :limit => 20, :order => "nid DESC", :conditions => {:type => 'note', :status => 1})
+    @notes = DrupalNode.find(:all, :limit => 20, :order => "nid DESC", :conditions => ["type = ? AND status = 1 AND created < ?",'note',(Time.now.to_i-30.minutes.to_i)])
     respond_to do |format|
       format.rss {
         render :layout => false
         response.headers["Content-Type"] = "application/xml; charset=utf-8"
       } 
     end
+  end
+
+  def liked_rss
+    @notes = DrupalNode.find(:all, :limit => 20, :order => "created DESC", :conditions => ['type = ? AND status = 1 AND cached_likes > 0', 'note'])
+    respond_to do |format|
+      format.rss {
+        render :layout => false, :template => "notes/rss"
+        response.headers["Content-Type"] = "application/xml; charset=utf-8"
+      } 
+    end
+  end
+
+  def rsvp
+    @node = DrupalNode.find params[:id]
+    # leave a comment
+    @comment = @node.add_comment({:subject => 'rsvp', :uid => current_user.uid,:body => 
+      "I will be attending!"
+    })
+    # make a tag
+    @node.add_tag("rsvp:"+current_user.username,current_user)
+    redirect_to @node.path+"#comments"
   end
 
 end

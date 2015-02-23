@@ -1,5 +1,9 @@
 class LegacyController < ApplicationController
 
+  def ioby
+    redirect_to "http://ioby.org/campaign/community-science-public-lab", :status => 301
+  end
+
   def notes
     if params[:id]
       redirect_to "/tag/"+params[:id], :status => 301
@@ -39,13 +43,14 @@ class LegacyController < ApplicationController
 
   def file
     # http://publiclab.org/sites/default/files/Public%20Lab.pdf
-    redirect_to "http://old.publiclab.org/sites/default/files/"+params[:filename]+"."+params[:format], :status => 301
+    #redirect_to "http://old.publiclab.org/sites/default/files/"+params[:filename]+"."+params[:format], :status => 301
+    redirect_to "http://publiclab.org/sites/default/files/"+params[:filename]+"."+params[:format], :status => 301
   end
 
-  def image
-    # sites/default/files/imagecache/thumb/san-martin-spectro.jpg
-    redirect_to "http://old.publiclab.org/sites/default/files/imagecache/"+params[:size]+"/"+params[:filename]+"."+params[:format], :status => 301
-  end
+#  def image
+#    # sites/default/files/imagecache/thumb/san-martin-spectro.jpg
+#    redirect_to "http://i.publiclab.org/sites/default/files/imagecache/"+params[:size]+"/"+params[:filename]+"."+params[:format], :status => 301
+#  end
 
   def register
     redirect_to "/signup", :status => 301
@@ -61,5 +66,10 @@ class LegacyController < ApplicationController
     @node = DrupalUrlAlias.find_by_dst('report/'+params[:id]).node
     redirect_to "/notes/"+@node.author.name.downcase+'/'+Time.at(@node.created_at).strftime("%m-%d-%Y")+'/'+params[:id], :status => 301
   end
+
+  def rss
+    redirect_to "/feed.rss", :status => 301
+  end
+
 
 end

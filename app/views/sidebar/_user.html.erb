@@ -1,20 +1,62 @@
 <div class="span3">
-  <a rel="tooltip" title="Share your work with others" data-placement="bottom" style="margin-bottom:6px;" href="/post" class="btn btn-primary btn-large btn-block"><i class="icon-pencil icon-white"></i> Post research &raquo;</a>
-  <a rel="tooltip" title="Collaborative pages others can edit" data-placement="bottom" href="/wiki/new" class="btn btn-block"><i class="icon-book"></i> Create wiki page &raquo;</a>
-  <% if current_user && (current_user.role == "moderator" || current_user.role == "admin") %>
-    <a rel="tooltip" title="You have permission to moderate spam messages" data-placement="bottom" href="/spam" class="btn btn-block"><i class="icon-ban-circle"></i> Moderate spam</a>
-  <% end %>
-  <hr />
+  <%= render :partial => "sidebar/post_button" %>
+  <%= render :partial => "sidebar/feature" %>
+
+  <div id="sidebar-carousel" class="carousel slide" data-ride="carousel">
+      <div class="carousel-inner">
+     
+        <!--
+        <div class="item active">
+          <a href="/wiki/barnraising"><img class="img img-rounded" src="http://i.publiclab.org/system/images/photos/000/006/113/original/barnraising-2014-banner-3.jpg" width="100%" /></a>
+        </div>
+
+        <div class="item" style="border:1px solid #ccc;padding:10px 14px;min-height:125px;margin-bottom:10px;">
+          <h3 style="margin-bottom:4px;"><a style="font-family:Junction Light;color:#444;padding-top:10px;" href="http://publiclab.org/wiki/public-lab-jobs">The Public Lab non-profit is hiring!</a></h3>
+          <p><a href="http://publiclab.org/wiki/public-lab-jobs">Learn more &raquo;</a></p>
+        </div>
+      -->
+
+      </div>
+    </div>
+
+    <script>
+      (setTimeout(function() {
+        $('#sidebar-carousel').carousel({
+          interval: 6000
+        })
+      },2000))()
+    </script>
+
+  <style>
+    .sidebox { background:white;border-color:#eee; }
+  </style>
+<!--
+  <div class="well sidebox">
+    <a class="hidden-phone" href="/wiki/openhour"><img src="http://i.publiclab.org/system/images/photos/000/004/913/original/icon-openhour.jpg" width="100%" /></a>
+    <h4><a href="/wiki/openhour">Join us for <i>Open Hour</i> &raquo;</a></h4>
+    <p style="margin-bottom:0;">A weekly open call at 8pm ET</p>
+  </div>
+-->
+
+  <div class="hidden-phone">
+    <p><i class="icon icon-envelope"></i> <a href="/lists">Discussion lists &raquo;</a></p>
+    <p>Much of our work happens on our regional and topical discussion lists. <a href="/lists">Join one today!</a></p>
+    <!--<p><a href="/wiki/barnraising-2013"><img src="/images/barnraising-2013.png" width="100%" /></a></p>-->
+    <hr />
+  </div>
 
   <% if @wikis && @wikis.length > 0 %>
   <div class="hidden-phone">
-  <h4>Related wiki pages</h4>
+  <h4>Recent wiki edits</h4>
   <ul class="nav wikis bullet">
     <% @wikis.each do |wiki| %>
-      <li><a href="<%= wiki.path %>"><i class="icon-book"></i> <%= wiki.title %></a> <small style="color:#888;">(updated <%= time_ago_in_words(wiki.updated_at) %> ago)</small></li>
+      <% if not wiki.latest.blank? %>
+        <li><a href="<%= wiki.path %>"><i class="icon-book"></i> <%= wiki.latest.title %></a> <small style="color:#888;">updated <%= time_ago_in_words(wiki.updated_at) %> ago by <a href="/profile/<%= wiki.latest.author.name %>"><%= wiki.latest.author.name %></a></small></li>
+      <% end %>
     <% end %>
   </ul>
   <% end %>
+  <p><a href="/wiki/">More &raquo;</a></p>
   </div>
 
 </div>

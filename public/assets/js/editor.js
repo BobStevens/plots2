@@ -3,8 +3,10 @@ $E = {
     args = args || {}
     args['textarea'] = args['textarea'] || 'text-input'
     $E.textarea = $('#'+args['textarea'])
+    $E.title = $('#title')
     args['preview'] = args['preview'] || 'preview'
     $E.preview = $('#'+args['preview'])
+    $E.textarea.bind('input propertychange',$E.save)
 
     marked.setOptions({
       gfm: true,
@@ -37,7 +39,7 @@ $E = {
     }
     var replace = a + sel + b;
     if (args && args['newline']) {
-      if ($E.textarea[0].selectionStart > 0) replace = "\n\n"+replace
+      if ($E.textarea[0].selectionStart > 0) replace = "\n"+replace
       replace = replace+"\n\n"
     }
     $E.textarea.val($E.textarea.val().substring(0,start) + replace + $E.textarea.val().substring(end,len));
@@ -78,22 +80,33 @@ $E = {
   h7: function() {
     $E.wrap('#######','')
   },
+  // this function is dedicated to Don Blair https://github.com/donblair
+  save: function() {
+    localStorage.setItem('plots:lastpost',$E.textarea.val())
+    localStorage.setItem('plots:lasttitle',$E.title.val())
+  },
+  recover: function() {
+    $E.textarea.val(localStorage.getItem('plots:lastpost'))
+    $E.title.val(localStorage.getItem('plots:lasttitle'))
+  },
   apply_template: function(template) {
     if ($E.textarea.val() != "") $E.textarea.val($E.textarea.val()+'\n\n'+$E.templates[template])
     else $E.textarea.val($E.templates[template])
   },
   templates: {
-    'default': "##What I want to do\n\n##My attempt and results\n\n##Questions and next steps",
-    'support': "##Details about the problem\n\n",
-    'event': "##Event details\n\nWhen, where, what\n\n##Background\n\nWho, why"
+    'default': "###What I want to do\n\n###My attempt and results\n\n###Questions and next steps\n\n###Why I'm interested",
+    'support': "###Details about the problem\n\n###A photo or screenshot of the setup",
+    'event': "###Event details\n\nWhen, where, what\n\n###Background\n\nWho, why",
+    'oiltestkit': "##Reflections on the Alpha Oil Testing Kit\n\n###What was tested\n\nWhen, where, what\n\n###Things that went well\n\n###Challenges encountered\n\n###Suggestions to improve the tool\n\n\n",
+    'question': "###What I want to do or know\n\n###Background story"
   },
   previewing: false,
   toggle_preview: function() {
     $E.preview[0].innerHTML = marked($E.textarea.val());
-    $('#preview-btn').button('toggle');
+    $('.preview-btn').button('toggle');
     $E.previewing = !$E.previewing
-    if ($E.previewing) $('#preview-btn').button('previewing');
-    else $('#preview-btn').button('reset');
+    if ($E.previewing) $('.preview-btn').button('previewing');
+    else $('.preview-btn').button('reset');
     $('#dropzone').toggle()
     $E.preview.toggle();
   }

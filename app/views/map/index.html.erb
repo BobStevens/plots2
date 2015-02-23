@@ -13,12 +13,20 @@
   L.tileLayer("http://a.tiles.mapbox.com/v3/jywarren.map-lmrwb2em/{z}/{x}/{y}.png").addTo(map)
 
   <% @maps.each do |map| %>
-    L.marker([<%= map.location[:y] %>, <%= map.location[:x] %>]).addTo(map).bindPopup("<a href='<%= map.slug %>'><%= map.title %></a>");
+    <% 
+      lat = false
+      lon = false
+      map.drupal_tag.each do |tag|
+        lat = tag.name.split(':').last if tag.name[0..2] == 'lat'
+        lon = tag.name.split(':').last if tag.name[0..2] == 'lon'
+      end
+    %> 
+    L.marker([<%= lat %>, <%= lon %>]).addTo(map).bindPopup("<a href='<%= map.path %>'><%= map.title %></a>");
   <% end %>
 </script>
 
 <br style="clear:both;" />
-<h1 style="margin-top:10px;font-size:4em;">Maps <small>open data from balloon and kite photography</small></h1>
+<h1 style="margin-top:10px;font-size:4em;">Maps <small>open data from balloon and kite photography (<%= @maps.length %> and counting)</small></h1>
   
 <hr />
 
@@ -29,6 +37,20 @@
   <h3 style="margin-top:0;">Do-It-Yourself "satellite" imagery</h3>
 
   <p>These maps were largely made by <a href="/tool/balloon-mapping">taking photos from balloons and kites</a>, a technique adopted and refined by Public Lab contributors. <a href="http://mapknitter.org">Make one yourself</a> and it can be featured here.</p>
+
+  <hr />
+
+  <h3>Popular tags</h3>
+
+  <p>
+    <a href="/maps/tag/oil-spill"><i class="icon icon-tag"></i> oil-spill</a>
+    <a href="/maps/tag/wetlands"><i class="icon icon-tag"></i> wetlands</a>
+    <a href="/maps/tag/landfill"><i class="icon icon-tag"></i> landfill</a>
+    <a href="/maps/tag/garden"><i class="icon icon-tag"></i> garden</a>
+    <a href="/maps/tag/ndvi"><i class="icon icon-tag"></i> NDVI</a>
+    <a href="/maps/tag/gowanus"><i class="icon icon-tag"></i> gowanus</a>
+    <a href="/maps/tag/protest"><i class="icon icon-tag"></i> protest</a>
+  </p>
 
   <hr />
 

@@ -12,9 +12,12 @@
 
 # Ignore all logfiles and tempfiles.
 /log/*.log
+/log/*
 /tmp
 *.swp
 .DS_Store
+.idea
+.ruby-version
 Gemfile.lock
 coverage*
 config/database.yml
@@ -24,3 +27,6 @@ config/config.yml
 config/initializers/site_keys.rb
 Gemfile.lock
 /public/system*
+/db/openid-store/
+/db/schema.rb
+#public/assets/application-*

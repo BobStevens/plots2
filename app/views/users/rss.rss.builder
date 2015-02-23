@@ -7,15 +7,17 @@ xml.rss :version => "2.0" do
 
    @notes.each do |node|
 
+    newline = '&#13;&#10;'
+
      body = node.body
-     body = "<img src='"+node.main_image.path(:default)+"'/><br /> "+node.body if node.main_image
+     body = "<img src='"+node.main_image.path(:default)+"'/><br />"+newline+node.body if node.main_image
 
      xml.item do
        xml.title       node.title
        xml.author      node.author.name
        xml.pubDate     node.created_at.to_s(:rfc822)
        #xml.link        url_for :only_path => false, :controller => 'notes', :action => 'show', :id => node.nid
-       xml.link        "http://publiclab.org/"+node.slug
+       xml.link        "http://publiclab.org/"+node.path
        #xml.image "http://publiclaboratory.org/"+node.main_image.path(:default) if node.main_image
        xml.description body 
        xml.guid        url_for :only_path => false, :controller => 'notes', :action => 'show', :id => node.nid

@@ -45,12 +45,12 @@ class NotesControllerTest < ActionController::TestCase
 
     # add a tag, and change the title and body
     newtitle = title + " which I amended"
-    post :update, :id => DrupalNode.find(:last, :conditions => {:uid => @user.uid}).id, :title => newtitle, :body => "This is a fascinating post about a balloon mapping event. <span id='teststring'>added content</span>", :tags => "balloon-mapping,event,meetup"
+    post :update, :id => DrupalNode.where(title: title).first.id, :title => newtitle, :body => "This is a fascinating post about a balloon mapping event. <span id='teststring'>added content</span>", :tags => "balloon-mapping,event,meetup"
     assert_redirected_to "/notes/"+@user.username+"/"+Time.now.strftime("%m-%d-%Y")+"/"+title.parameterize
 
     get(:show, {:author => @user.username, :date => Time.now.strftime("%m-%d-%Y"), :id => title.parameterize}) 
     assert_equal flash[:notice], "Edits saved."
-    assert_select "h2", newtitle
+    assert_select "h1", newtitle
     # assert_select "span#teststring", "added content" # this test does not work!! very frustrating. 
     # assert_select ".label", "meetup" # test for tag addition too, later
   end

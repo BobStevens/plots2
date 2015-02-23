@@ -32,7 +32,10 @@ $('#dropzone').fileupload({
   paramName: "image[photo]",
   dropZone: $('#dropzone'),
   dataType: 'json',
-  formData: {'uid':$D.uid},
+  formData: {
+    'uid':$D.uid,
+    'nid':$D.nid
+  },
   start: function(e) {
     $('#progress').show()
     $('#imagebar .uploading').show()
@@ -43,7 +46,22 @@ $('#dropzone').fileupload({
     $('#progress').hide()
     $('#imagebar .uploading').hide()
     $('#imagebar .prompt').show()
-    $E.wrap('![',']('+data.result.url.split('?')[0]+')', {'newline': true, 'fallback': data.result.filename}) // on its own line; see /app/assets/js/editor.js
+    var is_image = false
+    if (data.result['filename'].substr(-3,3) == "jpg") is_image = true
+    if (data.result['filename'].substr(-4,4) == "jpeg") is_image = true
+    if (data.result['filename'].substr(-3,3) == "png") is_image = true
+    if (data.result['filename'].substr(-3,3) == "gif") is_image = true
+    if (data.result['filename'].substr(-3,3) == "JPG") is_image = true
+    if (data.result['filename'].substr(-4,4) == "JPEG") is_image = true
+    if (data.result['filename'].substr(-3,3) == "PNG") is_image = true
+    if (data.result['filename'].substr(-3,3) == "GIF") is_image = true
+    if (is_image) {
+      image_url = data.result.url.split('?')[0]
+      orig_image_url = image_url.replace('medium','original') // not really portable, should parse response and look for "original_filename" or something
+      $E.wrap('[![',']('+image_url+')]('+orig_image_url+')', {'newline': true, 'fallback': data.result['filename']}) // on its own line; see /app/assets/js/editor.js
+    } else {
+      $E.wrap('<a href="'+data.result.url.split('?')[0]+'"><i class="icon icon-file"></i> ','</a>', {'newline': true, 'fallback': data.result['filename']}) // on its own line; see /app/assets/js/editor.js
+    }
     // here append the image id to the wiki edit form:
     if ($('#node_images').val() && $('#node_images').val().split(',').length > 1) $('#node_images').val([$('#node_images').val(),data.result.id].join(','))
     else $('#node_images').val(data.result.id)
@@ -71,7 +89,10 @@ $('#side-dropzone').fileupload({
   paramName: "image[photo]",
   dropZone: $('#side-dropzone'),
   dataType: 'json',
-  formData: {'uid':$D.uid},
+  formData: {
+    'uid':$D.uid,
+    'nid':$D.nid
+  },
   start: function(e) {
     $('.side-dropzone').css('border-color','#ccc')
     $('.side-dropzone').css('background','none')
